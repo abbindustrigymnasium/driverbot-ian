@@ -77,6 +77,8 @@ När jag nu kan styra komponenterna i min ESP, börjar jag designa hemsidan. Jag
 
 Nu till hindren. Jag kommer att använda en ultraljudssensor som pekar mot marken för att mäta hur lång tid det tar för signalen att reflekteras tillbaka. Med den informationen kan jag känna av när ett objekt kommer under sensorn. Jag kan 3D-skriva olika höga bitar så att bilen enkelt kan köra över dem och så att sensorn kan upptäcka skillnaden i tid. Jag kan placera den högsta biten vid mållinjen, så när sensorn känner av att avståndet är cirka 0 mikrosekunder, vet vi att vi har nått målet. Sedan kan jag använda olika höga bitar för olika typer av hinder och power-ups. Ett hinder kan till exempel få bilen att snurra slumpmässigt, medan en power-up kan minska din tid i banan eller göra bilen snabbare. För varje körning av en bana sparas din tid.
 
+![https://github.com/abbindustrigymnasium/driverbot-ian/blob/main/Kontroller.png](https://github.com/abbindustrigymnasium/driverbot-ian/blob/main/Kontroller.png)
+
 ## Tidsplan
 
 Nedan är tidsplanen för mitt projekt.
