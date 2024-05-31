@@ -77,7 +77,7 @@
         else{
             clientY = event.touches[0].clientY - sliderRect.top;
         }
-        
+
         let ratioY = clientY / sliderRect.height;
         motorSpeed = -255 * ratioY + 255
         console.log(motorSpeed)
@@ -91,7 +91,9 @@
             thumb.style.top = newTop;
         }
 
-        uploadMovement(0, lastDirection , motorSpeed);
+        if (!hasExited){
+            uploadMovement(0, lastDirection , motorSpeed);
+        }
     }
 
     function createJoystick(){
@@ -117,6 +119,9 @@
         });
     }
 
+    function recievedMQTT(message){
+    console.log(`Received message on topic: ${message.toString()}`);
+    }
     function setUpMQTT(){
         const MQTT_BROKER = "maqiatto.com";
         const MQTT_BROKER_PORT = 8883;
@@ -150,7 +155,9 @@
         });
 
         client.on('message', (topic, message) => {
-            //console.log(`Received message on topic ${topic}: ${message.toString()}`);
+            if(topic == "ian.baldelli@gmail.com/sensor"){
+                recievedMQTT(message)
+            }
         });
 
         client.on('error', (err) => {
@@ -163,10 +170,10 @@
     }
 
     onMount(() => {
-        
+
         createJoystick()
         setUpMQTT()
-        
+
     });
 </script>
 
