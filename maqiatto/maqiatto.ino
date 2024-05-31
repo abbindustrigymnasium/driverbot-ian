@@ -26,8 +26,8 @@ void moveMotor(int direction, int speed){
     digitalWrite(PIN_IN1, HIGH);
     digitalWrite(PIN_IN2, LOW);
   } else if (direction == 1){
-    digitalWrite(PIN_IN1, LOW);    
-    digitalWrite(PIN_IN2, HIGH);   
+    digitalWrite(PIN_IN1, LOW);
+    digitalWrite(PIN_IN2, HIGH);
   }
   analogWrite(PIN_ENA, speed);
 }
