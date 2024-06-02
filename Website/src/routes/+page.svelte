@@ -120,8 +120,14 @@
     }
 
     function recievedMQTT(message){
-    console.log(`Received message on topic: ${message.toString()}`);
+        if (message.length === 1) {
+            const byteValue = message[0];
+            console.log(`Received byte value: ${byteValue}`);
+        } else {
+            console.error('Received message is not a single byte');
+        }
     }
+
     function setUpMQTT(){
         const MQTT_BROKER = "maqiatto.com";
         const MQTT_BROKER_PORT = 8883;

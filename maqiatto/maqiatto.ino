@@ -21,6 +21,8 @@ String clientId = "ianterzo.iot.esp.id" + String(ESP.getChipId());
 
 Servo steering;
 
+long lastDuration = 0;
+
 void moveMotor(int direction, int speed){
   if (direction == 0){
     digitalWrite(PIN_IN1, HIGH);
@@ -111,25 +113,22 @@ void loop() {
     if (!mqttClient.connected()) {
       performConnect();
     } else {
-      // Measure distance using the ultrasonic sensor
+      // Mät hastigheten med ultraljudsensor
       digitalWrite(trigPin, LOW);
       delayMicroseconds(2);
       digitalWrite(trigPin, HIGH);
-      delayMicroseconds(10);
-      digitalWrite(trigPin, LOW);
+      delayMicroseconds(15);
+
 
       long duration = pulseIn(echoPin, HIGH);
-
-      if (duration > 500){
-        Serial.println(duration);
-        // Skicka om esp känner igen något.
+      Serial.println(duration);
+      if (duration > 290){ // När något är rakt under sensorn
         int value = 1;
         byte converted = (byte)value; // Convertera integer till en byte
         mqttClient.publish(TOPIC_SENSOR, &converted, 1);
 
       }
     }
-
     mqttClient.loop();
   }
 }
