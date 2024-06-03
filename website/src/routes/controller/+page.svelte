@@ -1,7 +1,7 @@
 <script>
     import mqtt from "mqtt";
     import { onMount } from 'svelte';
-    
+
     let numberOfPlayers = 1;
     let players = [];
 
@@ -13,6 +13,7 @@
     var lastDirection = -1; // Inte 1 eller 0
     let uploadDelay;
     var hasExited = false;
+
 
     function uploadMovement(boolean1, boolean2, integer){
         console.log(boolean1, boolean2, integer)
@@ -99,6 +100,55 @@
         }
     }
 
+    function recievedMQTT(message){
+        if (message.length === 1) {
+            const byteValue = message[0];
+            console.log(`Received byte value: ${byteValue}`);
+        } else {
+            console.error('Received message is not a single byte');
+        }
+    }
+
+    // Funktion för att starta en timer för en spelare
+    function startTimer(playerIndex) {
+        const startTime = Date.now();
+
+        return setInterval(() => {
+            const elapsedTime = Date.now() - startTime;
+            const minutes = String(Math.floor(elapsedTime / 60000)).padStart(2, '0');
+            const seconds = String(Math.floor((elapsedTime % 60000) / 1000)).padStart(2, '0');
+            players[playerIndex] = `Player ${playerIndex + 1} : ${minutes}:${seconds}`;
+        }, 1000);
+    }
+
+     // Funktion för att stoppa en timer och spara den passerade tiden till en array
+    function stopTimer(intervalId, playerIndex) {
+        clearInterval(intervalId);
+        console.log(`Player ${playerIndex + 1} time: ${players[playerIndex]}`);
+    }
+
+
+    function loadLeadebord(){
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('players')) {
+            numberOfPlayers = parseInt(urlParams.get('players'));
+        }
+
+       // Initiera spelarna array med en längd av numberOfPlayers
+players = Array(numberOfPlayers)
+    .fill() // Fyll arrayen med odefinierade värden
+    .map((_, index) => {
+        // För varje element, returnera en sträng som representerar spelaren
+        const playerNumber = index + 1;
+        return `Player ${playerNumber} : ---`;
+    });
+    let time = startTimer(0)
+    setTimeout(function(){
+  stopTimer(time, 0)
+}, 4000);
+
+    }
+
     function createJoystick(){
         import("joystick-controller").then(({ default: JoystickController }) => {
             new JoystickController(
@@ -122,20 +172,11 @@
         });
     }
 
-    function recievedMQTT(message){
-        if (message.length === 1) {
-            const byteValue = message[0];
-            console.log(`Received byte value: ${byteValue}`);
-        } else {
-            console.error('Received message is not a single byte');
-        }
-    }
-
     function setUpMQTT(){
         const MQTT_BROKER = "maqiatto.com";
         const MQTT_BROKER_PORT = 8883;
         const MQTT_USERNAME = "ian.baldelli@gmail.com";
-        const MQTT_KEY = "adrenaline123";
+        const MQTT_KEY = "";
 
         const options = {
             port: MQTT_BROKER_PORT,
@@ -178,15 +219,6 @@
         });
     }
 
-    function loadLeadebord(){
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('players')) {
-            numberOfPlayers = parseInt(urlParams.get('players'));
-        }
-        players = Array.from({ length: numberOfPlayers });
-
-    }
-
     onMount(() => {
         loadLeadebord()
         createJoystick()
@@ -209,10 +241,9 @@
 </div>
 
 <div id="leaderboard">
-    {#each players as _, index}
-        <div>Player 1 : ---</div>
+    {#each players as player, index}
+        <div>{player}</div>
     {/each}
-
 </div>
 <div id="zoneJoystick"></div>
 
