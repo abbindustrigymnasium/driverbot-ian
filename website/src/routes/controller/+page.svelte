@@ -3,6 +3,7 @@
     import { onMount } from 'svelte';
     
     let numberOfPlayers = 1;
+    let players = [];
 
     let client;
 
@@ -134,7 +135,7 @@
         const MQTT_BROKER = "maqiatto.com";
         const MQTT_BROKER_PORT = 8883;
         const MQTT_USERNAME = "ian.baldelli@gmail.com";
-        const MQTT_KEY = "";
+        const MQTT_KEY = "adrenaline123";
 
         const options = {
             port: MQTT_BROKER_PORT,
@@ -177,17 +178,19 @@
         });
     }
 
-    onMount(() => {
-        
+    function loadLeadebord(){
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('players')) {
+            numberOfPlayers = parseInt(urlParams.get('players'));
+        }
+        players = Array.from({ length: numberOfPlayers });
 
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('players')) {
-        numberOfPlayers = parseInt(urlParams.get('players'));
     }
-    console.log(numberOfPlayers)
+
+    onMount(() => {
+        loadLeadebord()
         createJoystick()
         setUpMQTT()
-
     });
 </script>
 
@@ -205,6 +208,12 @@
     <div class="thumb" bind:this={thumb}></div>
 </div>
 
+<div id="leaderboard">
+    {#each players as _, index}
+        <div>Player 1 : ---</div>
+    {/each}
+
+</div>
 <div id="zoneJoystick"></div>
 
 <style>
@@ -258,6 +267,10 @@
     }
     .middle {
         top: 50%;
+    }
+    #leaderboard{
+        position: absolute;
+        left: 50%;
     }
     :global(.joystick-container) {
         z-index: 1 !important;
