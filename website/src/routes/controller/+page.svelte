@@ -1,245 +1,254 @@
 <script>
-    import mqtt from "mqtt";
-    import { onMount } from 'svelte';
+import mqtt from "mqtt";
+import { onMount } from 'svelte';
 
-    let numberOfPlayers = 1;
-    let players = [];
+let numberOfPlayers = 1; // Standard för antalet spelare är 1, om spelarna inte väljer något annat.
 
-    let client;
+let players = [];
+let playerTimes = [];
 
-    let thumb;
-    var motorSpeed = 100;
+let client;
 
-    var lastDirection = -1; // Inte 1 eller 0
-    let uploadDelay;
-    var hasExited = false;
+let thumb;
+let hasExited = false;
 
+let motorSpeed = 100;
+let lastDirection = -1; // Får inte vara 1 eller 0
 
-    function uploadMovement(boolean1, boolean2, integer){
-        console.log(boolean1, boolean2, integer)
-        // Motor (0) or Servo (1)
-        // If motor, back (0) or front (1)
-        // Motor speed (0 - 255), or servo rotation (0 - 180)
+let uploadDelay;
+let startTimerDelay;
+let stopTimerDelay;
+let raceTimer;
+let playerHasStarted = false;
 
-        const byte1 = (boolean1 << 1) | boolean2;
-        const byte2 = integer;
+// Funktion för att ladda upp rörelse
+function uploadMovement(isMotor, isForward, value) {
+  console.log(isMotor, isForward, value); // Motor (0) eller Servo (1) // Om motor, bak (0) eller fram (1) // Motorhastighet (0 - 255), eller servorotation (0 - 180)
 
-        const buffer = new Uint8Array([byte1, byte2]);
+  // Komprimera till två bytes.
+  const byte1 = (isMotor << 1) | isForward;
+  const byte2 = value;
+  const buffer = new Uint8Array([byte1, byte2]);
 
-        client.publish('ian.baldelli@gmail.com/movement', buffer, (err) => {
-            if (err) {
-                console.error('Failed to publish message:', err);
-            } else {
-                console.log('Message published');
-            }
-        });
+  client.publish('ian.baldelli@gmail.com/movement', buffer, (err) => {
+    if (err) {
+      console.error('Failed to publish message:', err);
+    } else {
+      console.log('Message published');
     }
+  });
+}
 
-    function updateMovement(x, y, leveledX, leveledY, distance, angle){
+// Funktion för att uppdatera rörelse
+function updateMovement(x, y, leveledX, leveledY, distance, angle) {
+  if (x === 0 && y === 0) {
+    // Körs om man släpper joysticken
+    uploadMovement(0, 0, 0);
+    hasExited = true;
+    return;
+  }
 
-       if (x == 0 && y == 0 ){ // Körs om man släpper joysticken
+  clearTimeout(uploadDelay);
 
-        uploadMovement(0,0,0)
-        hasExited = true;
-        return;
-       }
+  let rotationValue = Math.round(-180 * angle / 3.1416);
+  let direction;
 
-       clearTimeout(uploadDelay)
-       let rotatationValue = Math.round(-180 * angle/3.1416)
+  if (rotationValue > 0) {
+    direction = 1;
+    rotationValue = -rotationValue + 180;
+  } else {
+    direction = 0;
+    rotationValue = rotationValue + 180;
+  }
 
+  if (direction!== lastDirection || hasExited) {
+    uploadMovement(0, direction, motorSpeed);
+    hasExited = false;
+  }
 
-       let date = new Date();
-       let direction;
+  lastDirection = direction;
+  uploadDelay = setTimeout(uploadMovement, 20, 1, 0, rotationValue); // Kommer bara köra om det har gått 0.5 sekunder från sista joystickrörelsen. (För att undvika att skicka för många paket till espn.)
+}
 
-       if (rotatationValue >  0){
-            direction = 1;
-            rotatationValue = -1 * rotatationValue + 180
-       }
-       else {
-            direction = 0;
-            rotatationValue = rotatationValue + 180
-       }
+// Funktion för att hantera tumrörelse
+function moveThumb(event) {
+  let clientY;
+  const sliderRect = thumb.parentElement.getBoundingClientRect();
 
-        if (direction != lastDirection || hasExited){
-            uploadMovement(0, direction, motorSpeed);
-            hasExited = false;
-        }
+  if (event.type.includes('click')) {
+    clientY = event.clientY - sliderRect.top;
+  } else {
+    clientY = event.touches[0].clientY - sliderRect.top;
+  }
 
-        lastDirection = direction
-        uploadDelay = setTimeout(uploadMovement, 20, 1, 0, rotatationValue); // Kommer bara köra om det har gått 0.5 secunder från sista joystickrörelsen. (För att undvika att skicka för många paket till espn.)
+  let ratioY = clientY / sliderRect.height;
+  motorSpeed = -255 * ratioY + 255;
+  console.log(motorSpeed);
+  console.log(ratioY);
 
+  if (ratioY < 0) {
+    let newTop = (100 * 0).toString() + "%";
+    thumb.style.top = newTop;
+  } else {
+    let newTop = (100 * ratioY).toString() + "%";
+    thumb.style.top = newTop;
+  }
 
+  if (!hasExited) {
+    uploadMovement(0, lastDirection, motorSpeed);
+  }
+}
+
+// Funktion för att starta en timer för en spelare
+function startTimer(playerIndex) {
+  playerHasStarted = true;
+  const startTime = Date.now();
+
+  raceTimer = setInterval(() => {
+    const elapsedTime = Date.now() - startTime;
+    const minutes = Math.floor(elapsedTime / 60000);
+    const seconds = Math.floor((elapsedTime % 60000) / 1000);
+
+    players[playerIndex] = `Player ${playerIndex + 1} : ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    playerTimes[playerIndex] = minutes * 60 + seconds;
+  }, 1000);
+}
+
+// Funktion för att stoppa en timer och spara den passerade tiden till en array
+function stopTimer(playerIndex) {
+  playerHasStarted = false;
+  clearInterval(raceTimer);
+  console.log(playerTimes);
+}
+
+// Funktion för att hantera mottagna MQTT-meddelanden
+function recievedMQTT(message) {
+  if (message.length === 1) {
+    const byteValue = message[0];
+
+    if (byteValue == 1) {
+      // Första spelaren med tiden 0
+      const playerIndex = playerTimes.findIndex(value => value === 0);
+
+      if (playerHasStarted) {
+        clearTimeout(stopTimerDelay);
+        stopTimerDelay = setTimeout(stopTimer, 500, playerIndex);
+      } else {
+        clearTimeout(startTimerDelay);
+        startTimerDelay = setTimeout(startTimer, 500, playerIndex);
+      }
     }
+  } else {
+    console.error('Received message is not a single byte');
+  }
+}
 
-    function moveThumb(event){
-        let clientY;
-        const sliderRect = thumb.parentElement.getBoundingClientRect();
+// Funktion för att ladda ledartavlan
+function loadLeaderboard() {
+  const urlParams = new URLSearchParams(window.location.search);
 
-        if (event.type.includes('click')){
-            clientY = event.clientY - sliderRect.top;
-        }
-        else{
-            clientY = event.touches[0].clientY - sliderRect.top;
-        }
+  if (urlParams.has('players')) {
+    numberOfPlayers = parseInt(urlParams.get('players'));
+  }
 
-        let ratioY = clientY / sliderRect.height;
-        motorSpeed = -255 * ratioY + 255
-        console.log(motorSpeed)
-        console.log(ratioY)
-        if (ratioY < 0){
-            let newTop = (100 * 0).toString() + "%";
-            thumb.style.top = newTop;
-        }
-        else {
-            let newTop = (100 * ratioY).toString() + "%";
-            thumb.style.top = newTop;
-        }
+  // Initiera spelarna array med en längd av numberOfPlayers
+  players = Array(numberOfPlayers).fill().map((_, index) => {
+    // För varje element, returnera en sträng som representerar spelaren
+    const playerNumber = index + 1;
+    return `Player ${playerNumber} : ---`;
+  });
 
-        if (!hasExited){
-            uploadMovement(0, lastDirection , motorSpeed);
-        }
-    }
+  playerTimes = Array(numberOfPlayers).fill().map(() => {
+    // För varje element, returnera 0
+    return 0;
+  });
+}
 
-    function recievedMQTT(message){
-        if (message.length === 1) {
-            const byteValue = message[0];
-            console.log(`Received byte value: ${byteValue}`);
-        } else {
-            console.error('Received message is not a single byte');
-        }
-    }
+// Funktion för att skapa joystick
+function createJoystick() {
+  import("joystick-controller").then(({ default: JoystickController }) => {
+    new JoystickController(
+      {
+        maxRange: 70,
+        level: 10,
+        radius: 70,
+        joystickRadius: 50,
+        opacity: 0.5,
+        containerClass: "joystick-container",
+        controllerClass: "joystick-controller",
+        joystickClass: "joystick",
+        distortion: true,
+        dynamicPosition: true,
+        dynamicPositionTarget: document.getElementById("zoneJoystick"),
+        mouseClickButton: "ALL",
+        hideContextMenu: true,
+      },
+      ({ x, y, leveledX, leveledY, distance, angle }) => updateMovement(x, y, leveledX, leveledY, distance, angle)
+    );
+  });
+}
 
-    // Funktion för att starta en timer för en spelare
-    function startTimer(playerIndex) {
-        const startTime = Date.now();
+// Funktion för att ställa in MQTT
+function setUpMQTT() {
+  const MQTT_BROKER = "maqiatto.com";
+  const MQTT_BROKER_PORT = 8883;
+  const MQTT_USERNAME = "ian.baldelli@gmail.com";
+  const MQTT_KEY = "";
 
-        return setInterval(() => {
-            const elapsedTime = Date.now() - startTime;
-            const minutes = String(Math.floor(elapsedTime / 60000)).padStart(2, '0');
-            const seconds = String(Math.floor((elapsedTime % 60000) / 1000)).padStart(2, '0');
-            players[playerIndex] = `Player ${playerIndex + 1} : ${minutes}:${seconds}`;
-        }, 1000);
-    }
+  const options = {
+    port: MQTT_BROKER_PORT,
+    protocol: 'ws',
+    username: MQTT_USERNAME,
+    password: MQTT_KEY
+  };
 
-     // Funktion för att stoppa en timer och spara den passerade tiden till en array
-    function stopTimer(intervalId, playerIndex) {
-        clearInterval(intervalId);
-        console.log(`Player ${playerIndex + 1} time: ${players[playerIndex]}`);
-    }
+  client = mqtt.connect(`ws://${MQTT_BROKER}`, options);
 
+  client.on('connect', () => {
+    console.log('Connected to MQTT broker');
 
-    function loadLeadebord(){
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('players')) {
-            numberOfPlayers = parseInt(urlParams.get('players'));
-        }
-
-       // Initiera spelarna array med en längd av numberOfPlayers
-players = Array(numberOfPlayers)
-    .fill() // Fyll arrayen med odefinierade värden
-    .map((_, index) => {
-        // För varje element, returnera en sträng som representerar spelaren
-        const playerNumber = index + 1;
-        return `Player ${playerNumber} : ---`;
+    client.subscribe('ian.baldelli@gmail.com/movement', (err) => {
+      if (err) {
+        console.error('Failed to subscribe:', err);
+      }
     });
-    let time = startTimer(0)
-    setTimeout(function(){
-  stopTimer(time, 0)
-}, 4000);
 
-    }
-
-    function createJoystick(){
-        import("joystick-controller").then(({ default: JoystickController }) => {
-            new JoystickController(
-                {
-                    maxRange: 70,
-                    level: 10,
-                    radius: 70,
-                    joystickRadius: 50,
-                    opacity: 0.5,
-                    containerClass: "joystick-container",
-                    controllerClass: "joystick-controller",
-                    joystickClass: "joystick",
-                    distortion: true,
-                    dynamicPosition: true,
-                    dynamicPositionTarget: document.getElementById("zoneJoystick"),
-                    mouseClickButton: "ALL",
-                    hideContextMenu: true,
-                },
-                ({ x, y, leveledX, leveledY, distance, angle }) => updateMovement(x, y, leveledX, leveledY, distance, angle)
-            );
-        });
-    }
-
-    function setUpMQTT(){
-        const MQTT_BROKER = "maqiatto.com";
-        const MQTT_BROKER_PORT = 8883;
-        const MQTT_USERNAME = "ian.baldelli@gmail.com";
-        const MQTT_KEY = "";
-
-        const options = {
-            port: MQTT_BROKER_PORT,
-            protocol: 'ws',
-            username: MQTT_USERNAME,
-            password: MQTT_KEY
-        };
-
-        client = mqtt.connect(`ws://${MQTT_BROKER}`, options);
-
-        client.on('connect', () => {
-            console.log('Connected to MQTT broker');
-
-            client.subscribe('ian.baldelli@gmail.com/movement', (err) => {
-                if (err) {
-                    console.error('Failed to subscribe:', err);
-                }
-            });
-
-            client.subscribe('ian.baldelli@gmail.com/sensor', (err) => {
-                if (err) {
-                    console.error('Failed to subscribe:', err);
-                }
-            });
-
-        });
-
-        client.on('message', (topic, message) => {
-            if(topic == "ian.baldelli@gmail.com/sensor"){
-                recievedMQTT(message)
-            }
-        });
-
-        client.on('error', (err) => {
-            console.error('Connection error:', err);
-        });
-
-        client.on('close', () => {
-            console.log('Connection closed');
-        });
-    }
-
-    onMount(() => {
-        loadLeadebord()
-        createJoystick()
-        setUpMQTT()
+    client.subscribe('ian.baldelli@gmail.com/sensor', (err) => {
+      if (err) {
+        console.error('Failed to subscribe:', err);
+      }
     });
+  });
+
+  client.on('message', (topic, message) => {
+    if (topic == "ian.baldelli@gmail.com/sensor") {
+      recievedMQTT(message);
+    }
+  });
+
+  client.on('error', (err) => {
+    console.error('Connection error:', err);
+  });
+
+  client.on('close', () => {
+    console.log('Connection closed');
+  });
+}
+
+// Initialisering när komponenten monteras
+onMount(() => {
+  loadLeaderboard();
+  createJoystick();
+  setUpMQTT();
+});
 </script>
 
-<svelte:head>
-    <title>Home</title>
-    <meta name="description" content="Svelte demo app" />
-</svelte:head>
-
 <img id="racing" src="racing.png" />
-<div class="slider"  on:touchstart={moveThumb}
-  on:touchmove={moveThumb}
-  on:click={moveThumb}>
+<div class="slider" on:touchstart={moveThumb} on:touchmove={moveThumb} on:click={moveThumb}>
     <span class="value top">255</span>
     <span class="value middle">120</span>
     <div class="thumb" bind:this={thumb}></div>
 </div>
-
 <div id="leaderboard">
     {#each players as player, index}
         <div>{player}</div>

@@ -4,14 +4,15 @@
 #include "PubSubClient.h"
 #include "Credentials.h"
 
+// Definiera konstanter för WiFi timeout och pinnar
 #define WIFI_TIMEOUT 1000
 
 #define PIN_ENA D0
 #define PIN_IN1 D1
 #define PIN_IN2 D2
 
-#define echoPin D6
-#define trigPin D7
+#define ECHO_PIN D6
+#define TRIG_PIN D7
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
@@ -23,40 +24,41 @@ Servo steering;
 
 long lastDuration = 0;
 
-void moveMotor(int direction, int speed){
-  if (direction == 0){
+// Funktion för att styra motorn
+void moveMotor(int direction, int speed) {
+  if (direction == 0) {
     digitalWrite(PIN_IN1, HIGH);
     digitalWrite(PIN_IN2, LOW);
-  } else if (direction == 1){
+  } else if (direction == 1) {
     digitalWrite(PIN_IN1, LOW);
     digitalWrite(PIN_IN2, HIGH);
   }
   analogWrite(PIN_ENA, speed);
 }
 
-void moveServo(int degrees){
+// Funktion för att styra servon
+void moveServo(int degrees) {
   steering.write(degrees);
 }
 
+// Callback-funktion för MQTT-data
 void dataCallback(char* topic, byte* payload, unsigned int length) {
   if (strcmp(topic, TOPIC_MOVEMENT) == 0) {
-    if (length == 2) { // Check if the packet is 2 bytes
+    // Kontrollera om paketet är 2 byte
+    if (length == 2) {
       byte byte1 = payload[0];
       byte byte2 = payload[1];
 
-      // Extract booleans
+      // Extrahera booleanvärden
       boolean boolean1 = (byte1 >> 1) & 1;
       boolean boolean2 = byte1 & 1;
-      Serial.println(boolean1);
-      Serial.println(boolean2);
-
-      // Extract integer
+ 
+      // Extrahera heltal
       int integer = byte2;
-      Serial.println(integer);
 
-      if (boolean1 == 0){
+      if (boolean1 == 0) {
         moveMotor(boolean2, integer);
-      } else if (boolean1 == 1){
+      } else if (boolean1 == 1) {
         moveServo(integer);
       }
     }
@@ -67,29 +69,35 @@ void setup() {
   Serial.begin(9600);
   Serial.setDebugOutput(true);
 
+  // Anslut servon till pinne D2
   steering.attach(2);
 
+  // Ställ in motorpinnar som utgångar
   pinMode(PIN_IN1, OUTPUT);
   pinMode(PIN_IN2, OUTPUT);
   pinMode(PIN_ENA, OUTPUT);
 
-  pinMode(trigPin, OUTPUT);
-  pinMode(echoPin, INPUT);
+  // Ställ in ultraljudssensorpinnar
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
 
+  // Anslut till WiFi-nätverk
   WiFi.begin(STA_SSID, STA_PASS);
   Serial.printf("Waiting for AP connection ...\n");
   while (WiFi.status() != WL_CONNECTED) {
-    delay(WIFI_TIMEOUT);
+    delay(1000);
     Serial.printf(".");
   }
   IPAddress ip = WiFi.localIP();
   Serial.printf("\nConnected to AP. IP : %d.%d.%d.%d\n", ip[0], ip[1], ip[2], ip[3]);
 
+  // Konfigurera MQTT-klient
   mqttClient.setServer(MQTT_BROKER, MQTT_BROKER_PORT);
-  mqttClient.setCallback(dataCallback);  // This sets the callback function
+  mqttClient.setCallback(dataCallback);  // Ställ in callback-funktionen
   mqttInitCompleted = true;
 }
 
+// Funktion för att ansluta till MQTT
 void performConnect() {
   uint16_t connectionDelay = 5000;
   while (!mqttClient.connected()) {
@@ -97,7 +105,7 @@ void performConnect() {
     if (mqttClient.connect(clientId.c_str(), MQTT_USERNAME, MQTT_KEY)) {
       Serial.printf("Trace   : Connected to Broker.\n");
 
-      // Subscription to your topic after connection was succeeded.
+      // Prenumerera på dina ämnen efter anslutning
       mqttClient.subscribe(TOPIC_MOVEMENT);
       mqttClient.subscribe(TOPIC_SENSOR);
     } else {
@@ -114,19 +122,18 @@ void loop() {
       performConnect();
     } else {
       // Mät hastigheten med ultraljudsensor
-      digitalWrite(trigPin, LOW);
+      digitalWrite(TRIG_PIN, LOW);
       delayMicroseconds(2);
-      digitalWrite(trigPin, HIGH);
+      digitalWrite(TRIG_PIN, HIGH);
       delayMicroseconds(15);
 
-
-      long duration = pulseIn(echoPin, HIGH);
+      long duration = pulseIn(ECHO_PIN, HIGH);
       Serial.println(duration);
-      if (duration > 290){ // När något är rakt under sensorn
+      // Skicka "true" (1) när ett föremål är rakt under sensorn
+      if (duration > 400) {
         int value = 1;
-        byte converted = (byte)value; // Convertera integer till en byte
+        byte converted = (byte)value; // Konvertera heltal till en byte
         mqttClient.publish(TOPIC_SENSOR, &converted, 1);
-
       }
     }
     mqttClient.loop();
