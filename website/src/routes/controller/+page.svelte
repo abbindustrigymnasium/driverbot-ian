@@ -1,4 +1,3 @@
-<script>
 import mqtt from "mqtt";
 import { onMount } from 'svelte';
 
@@ -21,6 +20,14 @@ let stopTimerDelay;
 let raceTimer;
 let playerHasStarted = false;
 
+// Variabler för MQTT-uppgifter och ämnen
+const MQTT_USERNAME = "";
+const MQTT_KEY = "";
+const MQTT_BROKER = "maqiatto.com";
+const MQTT_BROKER_PORT = 8883;
+const MQTT_MOVEMENT_TOPIC = "";
+const MQTT_SENSOR_TOPIC = "";
+
 // Funktion för att ladda upp rörelse
 function uploadMovement(isMotor, isForward, value) {
   console.log(isMotor, isForward, value); // Motor (0) eller Servo (1) // Om motor, bak (0) eller fram (1) // Motorhastighet (0 - 255), eller servorotation (0 - 180)
@@ -30,7 +37,7 @@ function uploadMovement(isMotor, isForward, value) {
   const byte2 = value;
   const buffer = new Uint8Array([byte1, byte2]);
 
-  client.publish('ian.baldelli@gmail.com/movement', buffer, (err) => {
+  client.publish(MQTT_MOVEMENT_TOPIC, buffer, (err) => {
     if (err) {
       console.error('Failed to publish message:', err);
     } else {
@@ -61,7 +68,7 @@ function updateMovement(x, y, leveledX, leveledY, distance, angle) {
     rotationValue = rotationValue + 180;
   }
 
-  if (direction!== lastDirection || hasExited) {
+  if (direction !== lastDirection || hasExited) {
     uploadMovement(0, direction, motorSpeed);
     hasExited = false;
   }
@@ -190,11 +197,6 @@ function createJoystick() {
 
 // Funktion för att ställa in MQTT
 function setUpMQTT() {
-  const MQTT_BROKER = "maqiatto.com";
-  const MQTT_BROKER_PORT = 8883;
-  const MQTT_USERNAME = "ian.baldelli@gmail.com";
-  const MQTT_KEY = "";
-
   const options = {
     port: MQTT_BROKER_PORT,
     protocol: 'ws',
@@ -207,13 +209,13 @@ function setUpMQTT() {
   client.on('connect', () => {
     console.log('Connected to MQTT broker');
 
-    client.subscribe('ian.baldelli@gmail.com/movement', (err) => {
+    client.subscribe(MQTT_MOVEMENT_TOPIC, (err) => {
       if (err) {
         console.error('Failed to subscribe:', err);
       }
     });
 
-    client.subscribe('ian.baldelli@gmail.com/sensor', (err) => {
+    client.subscribe(MQTT_SENSOR_TOPIC, (err) => {
       if (err) {
         console.error('Failed to subscribe:', err);
       }
@@ -221,7 +223,7 @@ function setUpMQTT() {
   });
 
   client.on('message', (topic, message) => {
-    if (topic == "ian.baldelli@gmail.com/sensor") {
+    if (topic === MQTT_SENSOR_TOPIC) {
       recievedMQTT(message);
     }
   });
@@ -241,78 +243,3 @@ onMount(() => {
   createJoystick();
   setUpMQTT();
 });
-</script>
-
-<img id="racing" src="racing.png" />
-<div class="slider" on:touchstart={moveThumb} on:touchmove={moveThumb} on:click={moveThumb}>
-    <span class="value top">255</span>
-    <span class="value middle">120</span>
-    <div class="thumb" bind:this={thumb}></div>
-</div>
-<div id="leaderboard">
-    {#each players as player, index}
-        <div>{player}</div>
-    {/each}
-</div>
-<div id="zoneJoystick"></div>
-
-<style>
-    .slider {
-        position: absolute;
-        background: radial-gradient(circle, rgba(233, 233, 233, 0.3) 0%, rgba(233, 233, 233, 1) 100%);
-        width: 78px;
-        height: 90%;
-        margin-top: auto;
-        margin-bottom: auto;
-        top: 0;
-        left: 8%;
-        bottom: 0;
-        right: 0;
-        border-radius: 30px;
-        border: 2px solid #c4c4c4;
-        z-index: 10;
-    }
-    #racing {
-        position: absolute;
-        width: 100%;
-        height: auto;
-        top: -75%;
-    }
-    .thumb {
-        position: absolute;
-        background: radial-gradient(circle, rgba(0, 0, 0, 0.36456589471726186) 0%, rgba(56, 56, 56, 0.41218494233630953) 27%);
-        width: 78px;
-        height: 78px; /* responsive thumb size */
-        left: -0px;
-        border-radius: 30px;
-        transform: translateY(-50%); /* center the thumb */
-    }
-    #zoneJoystick {
-        position: absolute;
-        right: 0;
-        width: 50%;
-        height: 100%;
-        top: 0;
-    }
-    .value {
-        border-bottom: 2px solid #c4c4c4;
-        color: #686868;
-        padding: 1px;
-        padding-left: 10px;
-        padding-right: 14px;
-        position: absolute;
-    }
-    .top {
-        top: 12px;
-    }
-    .middle {
-        top: 50%;
-    }
-    #leaderboard{
-        position: absolute;
-        left: 50%;
-    }
-    :global(.joystick-container) {
-        z-index: 1 !important;
-    }
-</style>
