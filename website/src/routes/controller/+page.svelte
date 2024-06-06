@@ -1,3 +1,4 @@
+<script>
 import mqtt from "mqtt";
 import { onMount } from 'svelte';
 
@@ -32,11 +33,12 @@ const MQTT_SENSOR_TOPIC = "";
 function uploadMovement(isMotor, isForward, value) {
   console.log(isMotor, isForward, value); // Motor (0) eller Servo (1) // Om motor, bak (0) eller fram (1) // Motorhastighet (0 - 255), eller servorotation (0 - 180)
 
-  // Komprimera till två bytes.
+  // Komprimera datan till två bytes
   const byte1 = (isMotor << 1) | isForward;
   const byte2 = value;
   const buffer = new Uint8Array([byte1, byte2]);
 
+  // Ladda upp med MQTT
   client.publish(MQTT_MOVEMENT_TOPIC, buffer, (err) => {
     if (err) {
       console.error('Failed to publish message:', err);
@@ -48,15 +50,16 @@ function uploadMovement(isMotor, isForward, value) {
 
 // Funktion för att uppdatera rörelse
 function updateMovement(x, y, leveledX, leveledY, distance, angle) {
+  // Körs bara om man släpper joysticken
   if (x === 0 && y === 0) {
-    // Körs om man släpper joysticken
     uploadMovement(0, 0, 0);
     hasExited = true;
     return;
   }
 
-  clearTimeout(uploadDelay);
+  clearTimeout(uploadDelay); // uploadDelay kommer bara köra om det har gått 0.5 sekunder från sista joystickrörelsen. 
 
+  // Få rätt värde för servo rotationen
   let rotationValue = Math.round(-180 * angle / 3.1416);
   let direction;
 
@@ -68,6 +71,7 @@ function updateMovement(x, y, leveledX, leveledY, distance, angle) {
     rotationValue = rotationValue + 180;
   }
 
+  // Starta motorn om spelaren byter riktning, eller om spelaren sist släppte joysticken
   if (direction !== lastDirection || hasExited) {
     uploadMovement(0, direction, motorSpeed);
     hasExited = false;
@@ -77,22 +81,23 @@ function updateMovement(x, y, leveledX, leveledY, distance, angle) {
   uploadDelay = setTimeout(uploadMovement, 20, 1, 0, rotationValue); // Kommer bara köra om det har gått 0.5 sekunder från sista joystickrörelsen. (För att undvika att skicka för många paket till espn.)
 }
 
-// Funktion för att hantera tumrörelse
+// Funktion för att hantera sliderörelse
 function moveThumb(event) {
   let clientY;
   const sliderRect = thumb.parentElement.getBoundingClientRect();
 
+  // Om på dator annars mobil
   if (event.type.includes('click')) {
     clientY = event.clientY - sliderRect.top;
   } else {
     clientY = event.touches[0].clientY - sliderRect.top;
   }
 
+  // Ta hastigheten för motorn
   let ratioY = clientY / sliderRect.height;
   motorSpeed = -255 * ratioY + 255;
-  console.log(motorSpeed);
-  console.log(ratioY);
 
+  // Beräkna rätt position for slider tummen 
   if (ratioY < 0) {
     let newTop = (100 * 0).toString() + "%";
     thumb.style.top = newTop;
@@ -121,11 +126,10 @@ function startTimer(playerIndex) {
   }, 1000);
 }
 
-// Funktion för att stoppa en timer och spara den passerade tiden till en array
+// Funktion för att stoppa en timer för en spelare
 function stopTimer(playerIndex) {
   playerHasStarted = false;
   clearInterval(raceTimer);
-  console.log(playerTimes);
 }
 
 // Funktion för att hantera mottagna MQTT-meddelanden
@@ -136,7 +140,8 @@ function recievedMQTT(message) {
     if (byteValue == 1) {
       // Första spelaren med tiden 0
       const playerIndex = playerTimes.findIndex(value => value === 0);
-
+      
+      // Stoppa eller starta tiden för spelaren
       if (playerHasStarted) {
         clearTimeout(stopTimerDelay);
         stopTimerDelay = setTimeout(stopTimer, 500, playerIndex);
@@ -154,6 +159,7 @@ function recievedMQTT(message) {
 function loadLeaderboard() {
   const urlParams = new URLSearchParams(window.location.search);
 
+  // Ta antalet spelare från URLen
   if (urlParams.has('players')) {
     numberOfPlayers = parseInt(urlParams.get('players'));
   }
@@ -237,9 +243,92 @@ function setUpMQTT() {
   });
 }
 
-// Initialisering när komponenten monteras
+// För att köra koden i browsern
 onMount(() => {
   loadLeaderboard();
   createJoystick();
   setUpMQTT();
 });
+</script>
+
+<svelte:head>
+    <title>Home</title>
+    <meta name="description" content="Svelte demo app" />
+</svelte:head>
+
+<img id="racing" src="racing.png" />
+<div class="slider"  on:touchstart={moveThumb}
+  on:touchmove={moveThumb}
+  on:click={moveThumb}>
+    <span class="value top">255</span>
+    <span class="value middle">120</span>
+    <div class="thumb" bind:this={thumb}></div>
+</div>
+
+<div id="leaderboard">
+    {#each players as player, index}
+        <div>{player}</div>
+    {/each}
+</div>
+<div id="zoneJoystick"></div>
+
+<style>
+    .slider {
+        position: absolute;
+        background: radial-gradient(circle, rgba(233, 233, 233, 0.3) 0%, rgba(233, 233, 233, 1) 100%);
+        width: 78px;
+        height: 90%;
+        margin-top: auto;
+        margin-bottom: auto;
+        top: 0;
+        left: 8%;
+        bottom: 0;
+        right: 0;
+        border-radius: 30px;
+        border: 2px solid #c4c4c4;
+        z-index: 10;
+    }
+    #racing {
+        position: absolute;
+        width: 100%;
+        height: auto;
+        top: -75%;
+    }
+    .thumb {
+        position: absolute;
+        background: radial-gradient(circle, rgba(0, 0, 0, 0.36456589471726186) 0%, rgba(56, 56, 56, 0.41218494233630953) 27%);
+        width: 78px;
+        height: 78px; /* responsive thumb size */
+        left: -0px;
+        border-radius: 30px;
+        transform: translateY(-50%); /* center the thumb */
+    }
+    #zoneJoystick {
+        position: absolute;
+        right: 0;
+        width: 50%;
+        height: 100%;
+        top: 0;
+    }
+    .value {
+        border-bottom: 2px solid #c4c4c4;
+        color: #686868;
+        padding: 1px;
+        padding-left: 10px;
+        padding-right: 14px;
+        position: absolute;
+    }
+    .top {
+        top: 12px;
+    }
+    .middle {
+        top: 50%;
+    }
+    #leaderboard{
+        position: absolute;
+        left: 50%;
+    }
+    :global(.joystick-container) {
+        z-index: 1 !important;
+    }
+</style>
